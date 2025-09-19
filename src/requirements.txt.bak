@@ -1,0 +1,9 @@
+# ONNX Runtime for ReID model inference
+onnxruntime-gpu==1.22.0; 'darwin' not in sys_platform and platform_machine != 'aarch64'
+# CPU runtime for Mac and ARM
+onnxruntime; 'darwin' in sys_platform or platform_machine == 'aarch64'
+
+# Image processing
+Pillow==10.3.0
+
+# Numerical operations (numpy is included with onnxruntime)
