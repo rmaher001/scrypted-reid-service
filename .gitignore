@@ -1,0 +1,36 @@
+# Node.js dependencies
+node_modules/
+
+# Build output
+out/
+dist/
+
+# Python cache files
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# Log files
+*.log
+reid-service.log
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# IDE files
+.vscode/
+.idea/
+
+# Temporary files
+*.tmp
+*.temp
+
+# Model files (downloaded at runtime)
+files/
+models/
+
+# Environment files
+.env
+.env.local
