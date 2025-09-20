@@ -84,11 +84,14 @@ The ONNX model (osnet_ain_multisource.onnx) is downloaded automatically from Git
 
 ## File Structure Notes
 
-- **src/**: Python source code
+- **src/**: Python source code (current implementation)
+- **src_typescript_backup/**: Original TypeScript implementation (historical reference)
+  - Contains the original single-plugin Smart Notifier implementation before architecture split
+  - Includes `main.ts` and `reid-engine.ts` from the monolithic design
+  - Preserved for reference when understanding the evolution to two-plugin architecture
 - **dist/**: Built TypeScript artifacts (legacy from original TS implementation)
-- **src_typescript_backup/**: Original TypeScript implementation backup
-- **models/**: Directory for ONNX model storage
-- **out/**: Plugin build output
+- **models/**: Directory for ONNX model storage (auto-downloaded)
+- **out/**: Plugin build output (ignored in git)
 
 ## Development Notes
 
