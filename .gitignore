@@ -29,7 +29,6 @@ Thumbs.db
 
 # Model files (downloaded at runtime)
 files/
-models/
 
 # Environment files
 .env
