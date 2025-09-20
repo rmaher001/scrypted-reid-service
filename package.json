@@ -1,8 +1,7 @@
 {
   "name": "@scrypted/reid-service",
-  "version": "0.1.0",
+  "version": "0.1.6",
   "description": "Person Re-Identification (ReID) Service for Smart Notifications",
-  "main": "out/main.nodejs.js",
   "scripts": {
     "scrypted-setup-project": "scrypted-setup-project",
     "prescrypted-setup-project": "scrypted-package-json",
@@ -36,7 +35,8 @@
     "runtime": "python",
     "type": "API",
     "interfaces": [
-      "BufferConverter"
+      "BufferConverter",
+      "ClusterForkInterface"
     ]
   }
 }
