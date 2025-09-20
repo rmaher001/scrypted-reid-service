@@ -28,9 +28,12 @@ class TrackedPerson:
         self.person_id = person_id
         self.first_seen = time.time()
         self.last_seen = time.time()
+        self.created_at = time.time()
         self.embedding = embedding
-        self.camera_id = camera_id
-        self.camera_name = camera_name
+        self.first_camera_id = camera_id
+        self.first_camera_name = camera_name
+        self.cameras = [camera_id]  # List of camera IDs that have seen this person
+        self.camera_names = [camera_name]  # Corresponding camera names
         self.snapshot = snapshot
 
 class ReIDEngine:
@@ -39,7 +42,11 @@ class ReIDEngine:
         self.tracked_persons: OrderedDict[str, TrackedPerson] = OrderedDict()
         self.tracking_window_ms = 60000  # 60 seconds default
         self.debug_mode = False
-        self.similarity_threshold = 0.6  # Minimum similarity to consider same person
+        self.similarity_threshold = 0.7  # Minimum similarity to consider same person
+
+        # Basic stats
+        self.total_requests = 0
+        self.start_time = time.time()
 
     async def initialize(self):
         """Initialize ONNX model"""
@@ -59,6 +66,9 @@ class ReIDEngine:
         """
         if not self.session:
             raise Exception('ReID engine not initialized')
+
+        # Update stats
+        self.total_requests += 1
 
         # Clean up old entries
         self._cleanup_old_entries()
@@ -85,16 +95,24 @@ class ReIDEngine:
         match = self._find_best_match(embedding)
 
         if match and match[1] >= self.similarity_threshold:
-            # Known person - update last seen
+            # Known person - update last seen and camera tracking
             person_id = match[0]
             tracked = self.tracked_persons[person_id]
             tracked.last_seen = time.time()
 
-            self.log(f'ReID match: {person_id} on {camera_name} (similarity: {match[1]:.3f})')
+            # Add camera to tracking if not already seen
+            if camera_id not in tracked.cameras:
+                tracked.cameras.append(camera_id)
+                tracked.camera_names.append(camera_name)
+
+            self.log(f'Match on {camera_name} (similarity: {match[1]:.3f})', person_id, False)
 
             return {
                 'isNew': False,
                 'personId': person_id,
+                'confidence': float(match[1]),
+                'matchedCameras': tracked.camera_names.copy(),
+                'embedding': embedding.tolist(),
                 'firstDetection': self._tracked_to_dict(tracked)
             }
         else:
@@ -111,11 +129,14 @@ class ReIDEngine:
 
             self.tracked_persons[person_id] = tracked
 
-            self.log(f'New person: {person_id} detected on {camera_name}')
+            self.log(f'New person detected on {camera_name}', person_id, True)
 
             return {
                 'isNew': True,
                 'personId': person_id,
+                'confidence': 1.0,  # New person has 100% confidence
+                'matchedCameras': [camera_name],
+                'embedding': embedding.tolist(),
                 'firstDetection': self._tracked_to_dict(tracked)
             }
 
@@ -192,9 +213,11 @@ class ReIDEngine:
         return f'person_{int(time.time() * 1000)}_{rand_str}'
 
     def _cleanup_old_entries(self):
-        """Remove entries older than tracking window"""
+        """Remove entries older than cache expiry (tracking window + 30s buffer)"""
         current_time = time.time()
-        cutoff_time = current_time - (self.tracking_window_ms / 1000)
+        # Cache expiry is 90 seconds (60s tracking window + 30s buffer)
+        cache_expiry_ms = 90000
+        cutoff_time = current_time - (cache_expiry_ms / 1000)
 
         # Find keys to remove
         keys_to_remove = []
@@ -212,8 +235,11 @@ class ReIDEngine:
             'personId': tracked.person_id,
             'firstSeen': tracked.first_seen * 1000,  # Convert to ms
             'lastSeen': tracked.last_seen * 1000,
-            'cameraId': tracked.camera_id,
-            'cameraName': tracked.camera_name,
+            'createdAt': tracked.created_at * 1000,
+            'firstCameraId': tracked.first_camera_id,
+            'firstCameraName': tracked.first_camera_name,
+            'cameras': tracked.cameras.copy(),
+            'cameraNames': tracked.camera_names.copy(),
             'snapshot': tracked.snapshot
         }
 
@@ -229,9 +255,15 @@ class ReIDEngine:
 
     def get_stats(self) -> Dict:
         """Get current stats"""
+        uptime_seconds = time.time() - self.start_time
+        requests_per_second = self.total_requests / uptime_seconds if uptime_seconds > 0 else 0
+
         return {
             'trackedPersons': len(self.tracked_persons),
-            'cacheSize': len(self.tracked_persons) * FEATURE_DIM * 4  # Approximate bytes
+            'cacheSize': len(self.tracked_persons) * FEATURE_DIM * 4,  # Approximate bytes
+            'totalRequests': self.total_requests,
+            'requestsPerSecond': round(requests_per_second, 2),
+            'uptimeSeconds': round(uptime_seconds, 1)
         }
 
     def clear(self):
@@ -239,7 +271,12 @@ class ReIDEngine:
         self.tracked_persons.clear()
         self.log('Cleared all tracked persons')
 
-    def log(self, message: str):
+    def log(self, message: str, person_id: str = None, is_new: bool = None):
         """Log message if debug mode is enabled"""
         if self.debug_mode:
-            print(f'[ReID] {message}')
+            timestamp = int(time.time() * 1000)
+            if person_id:
+                is_new_str = "NEW " if is_new else "SEEN" if is_new is False else "    "
+                print(f'[{timestamp}] [{person_id:>20}] [{is_new_str:>4}] [ReID] {message}', flush=True)
+            else:
+                print(f'[{timestamp}] {" " * 22} {" " * 6} [ReID] {message}', flush=True)

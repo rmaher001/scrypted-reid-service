@@ -8,6 +8,15 @@ import io
 import time
 from typing import Optional
 
+def log_with_timestamp(message, person_id=None, is_new=None):
+    """Log message with millisecond timestamp, person ID, and isNew columns"""
+    timestamp = int(time.time() * 1000)
+    if person_id:
+        is_new_str = "NEW " if is_new else "SEEN" if is_new is False else "    "
+        print(f"[{timestamp}] [{person_id:>20}] [{is_new_str:>4}] {message}", flush=True)
+    else:
+        print(f"[{timestamp}] {' ' * 22} {' ' * 6} {message}", flush=True)
+
 class ReIDService(ScryptedDeviceBase, BufferConverter):
     def __init__(self, nativeId=None):
         super().__init__(nativeId)
@@ -19,6 +28,7 @@ class ReIDService(ScryptedDeviceBase, BufferConverter):
         # Initialize ReID engine lazily
         self.reid_engine = None
         self.onnx_session = None
+        self.last_stats_log = 0
         print("ReIDService constructor completed successfully", flush=True)
 
     def download_model(self):
@@ -145,6 +155,13 @@ class ReIDService(ScryptedDeviceBase, BufferConverter):
 
             print(f"ReID: {device_name} - {detection_count} detections, hasPersons: {has_persons}", flush=True)
 
+            # Log stats periodically (every 60 seconds)
+            current_time = time.time()
+            if self.reid_engine and current_time - self.last_stats_log > 60:
+                stats = self.reid_engine.get_stats()
+                print(f"ReID Stats: {stats['totalRequests']} requests, {stats['requestsPerSecond']} req/s, {stats['trackedPersons']} persons tracked", flush=True)
+                self.last_stats_log = current_time
+
             # If no detections or no ReID engine, return early
             if detection_count == 0 or not self.reid_engine:
                 return json.dumps({
@@ -223,11 +240,14 @@ class ReIDService(ScryptedDeviceBase, BufferConverter):
                                     'person'
                                 )
 
-                                print(f"ReID result: isNew={reid_result.get('isNew')}, personId={reid_result.get('personId')}", flush=True)
+                                log_with_timestamp(f"confidence={reid_result.get('confidence', 0):.3f}", reid_result.get('personId'), reid_result.get('isNew'))
 
                                 # Add ReID result to detection
                                 person_det['personId'] = reid_result.get('personId')
                                 person_det['isNew'] = reid_result.get('isNew')
+                                person_det['confidence'] = reid_result.get('confidence')
+                                person_det['matchedCameras'] = reid_result.get('matchedCameras')
+                                person_det['embedding'] = reid_result.get('embedding')
                                 reid_results.append(reid_result)
 
                             except Exception as e:
